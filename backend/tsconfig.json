@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "declaration": false,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "target": "ES2023",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "baseUrl": "./",
+    "incremental": true,
+    // Keep the incremental cache inside dist/. `nest build` clears dist/, so the
+    // cache can never outlive the output it describes — otherwise tsc reports
+    // "Found 0 errors", emits nothing, and dist/main.js is silently missing.
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
+    "skipLibCheck": true,
+    "strictNullChecks": true,
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitAny": true,
+    "strictBindCallApply": true,
+    "noFallthroughCasesInSwitch": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  // prisma/seed.ts is intentionally outside the build: it runs through ts-node
+  // and must not end up in dist/, which would shift the output root.
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

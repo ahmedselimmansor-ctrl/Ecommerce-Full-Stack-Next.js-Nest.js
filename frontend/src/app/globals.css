@@ -1,0 +1,177 @@
+@import 'tailwindcss';
+
+/*
+  Tailwind v4 CSS-first configuration.
+
+  Design language: warm off-white paper, near-black ink, one clay accent, in an
+  editorial register rather than a shop template.
+
+  Dark mode is class-based rather than media-based so the visitor can override
+  the OS. Every utility compiles to `var(--color-…)`, so redefining those
+  variables under `.dark` flips the entire palette without a single `dark:`
+  variant in the components.
+*/
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-paper: #faf8f5;
+  --color-paper-dim: #f2eee8;
+  --color-surface: #ffffff;
+  --color-ink: #14110f;
+  --color-ink-soft: #57504a;
+  --color-ink-faint: #8c837b;
+  --color-line: #e2dbd2;
+  --color-clay: #9c4a2a;
+  --color-clay-soft: #b56a4a;
+  --color-sage: #5a6247;
+
+  --font-display: 'Times New Roman', 'Georgia', serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Arabic needs a font stack that actually has the glyphs. */
+  --font-arabic: 'Segoe UI', 'Noto Naskh Arabic', 'Tahoma', ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 2px;
+  --spacing-gutter: 1.5rem;
+}
+
+/*
+  Dark palette. Not a simple inversion: paper becomes a warm near-black, ink
+  becomes a warm off-white, and clay is lifted so it keeps contrast on a dark
+  ground instead of turning muddy.
+*/
+.dark {
+  --color-paper: #14110f;
+  --color-paper-dim: #1e1a17;
+  --color-surface: #1a1614;
+  --color-ink: #f5f1ea;
+  --color-ink-soft: #b8afa5;
+  --color-ink-faint: #857c73;
+  --color-line: #322c27;
+  --color-clay: #d98b68;
+  --color-clay-soft: #c47a56;
+  --color-sage: #9aa87f;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    transition: background-color 200ms ease, color 200ms ease;
+  }
+
+  /* Arabic pages get the Arabic stack and slightly looser leading. */
+  html[lang='ar'] body {
+    font-family: var(--font-arabic);
+    line-height: 1.75;
+  }
+
+  html[lang='ar'] .font-display {
+    font-family: var(--font-arabic);
+  }
+
+  ::selection {
+    background-color: var(--color-ink);
+    color: var(--color-paper);
+  }
+
+  /* Keyboard focus stays visible everywhere; pointer focus does not. */
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
+  }
+
+  /* Native controls follow the theme instead of staying stubbornly white. */
+  input,
+  select,
+  textarea {
+    color-scheme: inherit;
+  }
+}
+
+@layer components {
+  .container-page {
+    width: 100%;
+    max-width: 80rem;
+    margin-inline: auto;
+    padding-inline: 1.25rem;
+  }
+
+  @media (min-width: 768px) {
+    .container-page {
+      padding-inline: 2rem;
+    }
+  }
+
+  .eyebrow {
+    font-size: 0.6875rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-ink-faint);
+  }
+
+  /* Arabic has no letter case, and wide tracking hurts legibility. */
+  html[lang='ar'] .eyebrow {
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 0.75rem;
+  }
+
+  html[lang='ar'] .tracking-wide-latin {
+    letter-spacing: 0;
+  }
+
+  .field {
+    width: 100%;
+    border: 1px solid var(--color-line);
+    background-color: var(--color-surface);
+    padding: 0.75rem 0.875rem;
+    font-size: 0.9375rem;
+    color: var(--color-ink);
+    transition: border-color 150ms ease;
+  }
+
+  .field::placeholder {
+    color: var(--color-ink-faint);
+  }
+
+  .field:focus {
+    border-color: var(--color-ink);
+    outline: none;
+  }
+
+  .field[aria-invalid='true'] {
+    border-color: var(--color-clay);
+  }
+
+  .field:disabled {
+    background-color: var(--color-paper-dim);
+    color: var(--color-ink-faint);
+  }
+}
+
+/* Product imagery loads progressively; hold the aspect box to avoid layout shift. */
+.aspect-portrait {
+  aspect-ratio: 3 / 4;
+}
+
+/*
+  Logical-property helpers so RTL mirrors automatically. `start-3` is "3 from
+  the reading-start edge": left in English, right in Arabic.
+*/
+.start-3 {
+  inset-inline-start: 0.75rem;
+}
+
+.end-2 {
+  inset-inline-end: 0.5rem;
+}
+
+/* Chevrons and arrows must point the other way in RTL. */
+[dir='rtl'] .flip-rtl {
+  transform: scaleX(-1);
+}

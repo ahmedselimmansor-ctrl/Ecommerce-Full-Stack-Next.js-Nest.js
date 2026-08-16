@@ -1,0 +1,18 @@
+node_modules
+dist
+.git
+.env
+.env.*
+!.env.example
+
+# Incremental build state from the host makes `tsc` think dist/ is already up to
+# date, so it emits nothing inside the image. Never copy it in.
+*.tsbuildinfo
+
+npm-debug.log*
+coverage
+.vscode
+.idea
+*.md
+Dockerfile
+.dockerignore

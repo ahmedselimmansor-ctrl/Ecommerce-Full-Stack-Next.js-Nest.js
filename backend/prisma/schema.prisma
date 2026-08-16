@@ -1,0 +1,305 @@
+// Prisma schema — PostgreSQL (Google Cloud SQL)
+// Money is stored as integer minor units (piastres/cents) to avoid float drift.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+enum Gender {
+  MEN
+  WOMEN
+  UNISEX
+  KIDS
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CASH_ON_DELIVERY
+  CARD
+}
+
+enum PaymentStatus {
+  UNPAID
+  AWAITING_PAYMENT
+  PAID
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  phone        String?
+  role         Role      @default(CUSTOMER)
+  isActive     Boolean   @default(true)
+  addresses    Address[]
+  orders       Order[]
+  reviews      Review[]
+  cart         Cart?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("users")
+}
+
+model Address {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName   String
+  phone      String
+  line1      String
+  line2      String?
+  city       String
+  state      String
+  postalCode String?
+  country    String   @default("EG")
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  @@map("addresses")
+}
+
+model Category {
+  id     String @id @default(cuid())
+  name   String
+  // Arabic copy lives alongside the English column rather than in a separate
+  // translations table: there are exactly two locales and every row has both,
+  // so a join would cost more than it saves.
+  nameAr String?
+
+  slug          String  @unique
+  description   String?
+  descriptionAr String?
+  imageUrl      String?
+  position    Int        @default(0)
+  parentId    String?
+  parent      Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Category[] @relation("CategoryTree")
+  products    Product[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([parentId])
+  @@map("categories")
+}
+
+model Product {
+  id            String @id @default(cuid())
+  name          String
+  nameAr        String?
+  slug          String @unique
+  description   String
+  descriptionAr String?
+
+  priceCents     Int
+  compareAtCents Int?
+  currency       String  @default("EGP")
+  gender         Gender  @default(UNISEX)
+  material       String?
+  materialAr     String?
+  care           String?
+  careAr         String?
+  isActive       Boolean          @default(true)
+  isFeatured     Boolean          @default(false)
+  ratingAvg      Float            @default(0)
+  ratingCount    Int              @default(0)
+  categoryId     String
+  category       Category         @relation(fields: [categoryId], references: [id])
+  images         ProductImage[]
+  variants       ProductVariant[]
+  reviews        Review[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([categoryId])
+  @@index([isActive, createdAt])
+  @@index([isFeatured])
+  @@map("products")
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  alt       String?
+  position  Int     @default(0)
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+model ProductVariant {
+  id         String     @id @default(cuid())
+  productId  String
+  product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku        String     @unique
+  size       String
+  color      String
+  colorAr    String?
+  colorHex   String?
+  priceCents Int?
+  stock      Int        @default(0)
+  cartItems  CartItem[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@unique([productId, size, color])
+  @@index([productId])
+  @@map("product_variants")
+}
+
+model Cart {
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        String         @id @default(cuid())
+  cartId    String
+  cart      Cart           @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  quantity  Int            @default(1)
+  createdAt DateTime       @default(now())
+
+  @@unique([cartId, variantId])
+  @@index([cartId])
+  @@map("cart_items")
+}
+
+model Order {
+  id          String      @id @default(cuid())
+  orderNumber String      @unique
+  userId      String
+  user        User        @relation(fields: [userId], references: [id])
+  status      OrderStatus @default(PENDING)
+
+  paymentMethod   PaymentMethod  @default(CASH_ON_DELIVERY)
+  paymentStatus   PaymentStatus  @default(UNPAID)
+  paymentProvider String?
+  // Gateway transaction reference, used for reconciliation and refunds.
+  paymentRef      String?
+  paidAt          DateTime?
+  paymentEvents   PaymentEvent[]
+
+  currency String @default("EGP")
+  subtotalCents  Int
+  shippingCents  Int           @default(0)
+  discountCents  Int           @default(0)
+  totalCents     Int
+  // Shipping address is snapshotted so later address edits never rewrite history.
+  shipFullName   String
+  shipPhone      String
+  shipLine1      String
+  shipLine2      String?
+  shipCity       String
+  shipState      String
+  shipPostalCode String?
+  shipCountry    String        @default("EG")
+  notes          String?
+  items          OrderItem[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variantId String?
+
+  // Both locales are snapshotted so an Arabic invoice still reads in Arabic
+  // even after the product is renamed or deleted.
+  productName   String
+  productNameAr String?
+  productSlug   String
+  sku           String
+  size          String
+  color         String
+  colorAr       String?
+
+  imageUrl String?
+  unitPriceCents Int
+  quantity       Int
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+/// Append-only audit log of gateway callbacks.
+///
+/// Every Kashier webhook lands here before the order is touched. The unique
+/// index on (provider, transactionId, eventType) makes replays idempotent:
+/// a duplicate delivery hits the constraint and is acknowledged without
+/// re-applying the state change.
+model PaymentEvent {
+  id            String   @id @default(cuid())
+  orderId       String?
+  order         Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  provider      String   @default("kashier")
+  eventType     String
+  transactionId String
+  status        String
+  amountCents   Int?
+  currency      String?
+  signatureOk   Boolean  @default(false)
+  payload       Json
+  createdAt     DateTime @default(now())
+
+  @@unique([provider, transactionId, eventType])
+  @@index([orderId])
+  @@map("payment_events")
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating    Int
+  title     String?
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, userId])
+  @@index([productId])
+  @@map("reviews")
+}

@@ -1,0 +1,98 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGION: europe-west1
+  REPO: atelier-prod
+  BACKEND_SERVICE: atelier-prod-api
+  FRONTEND_SERVICE: atelier-prod-web
+
+# Keyless auth via Workload Identity Federation — no service account JSON key
+# is ever stored in the repository.
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push the API image
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${REPO}/api:${GITHUB_SHA}"
+          docker build -t "$IMAGE" -t "${IMAGE%:*}:latest" ./backend
+          docker push "$IMAGE"
+          docker push "${IMAGE%:*}:latest"
+          echo "API_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Build and push the storefront image
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${REPO}/web:${GITHUB_SHA}"
+          docker build \
+            --build-arg NEXT_PUBLIC_SITE_URL="${{ secrets.SITE_URL }}" \
+            --build-arg NEXT_PUBLIC_GCS_BUCKET="${{ secrets.GCS_BUCKET }}" \
+            --build-arg NEXT_PUBLIC_CURRENCY=EGP \
+            --build-arg NEXT_PUBLIC_LOCALE=en-EG \
+            -t "$IMAGE" -t "${IMAGE%:*}:latest" ./frontend
+          docker push "$IMAGE"
+          docker push "${IMAGE%:*}:latest"
+          echo "WEB_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      # Migrations run before the new revision receives traffic, through the
+      # Cloud SQL Auth Proxy over a private connection.
+      - name: Run database migrations
+        run: |
+          curl -sSLo cloud-sql-proxy \
+            https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64
+          chmod +x cloud-sql-proxy
+          ./cloud-sql-proxy --port 5432 "${{ secrets.CLOUDSQL_CONNECTION_NAME }}" &
+          for _ in $(seq 1 30); do nc -z 127.0.0.1 5432 && break; sleep 1; done
+
+          cd backend
+          npm ci
+          npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+
+      - name: Deploy the API
+        run: |
+          gcloud run deploy "$BACKEND_SERVICE" \
+            --image "$API_IMAGE" \
+            --region "$REGION" \
+            --quiet
+
+      - name: Deploy the storefront
+        run: |
+          gcloud run deploy "$FRONTEND_SERVICE" \
+            --image "$WEB_IMAGE" \
+            --region "$REGION" \
+            --quiet
+
+      - name: Smoke test
+        run: |
+          API_URL=$(gcloud run services describe "$BACKEND_SERVICE" --region "$REGION" --format='value(status.url)')
+          WEB_URL=$(gcloud run services describe "$FRONTEND_SERVICE" --region "$REGION" --format='value(status.url)')
+          curl -fsS "${API_URL}/api/v1/health" > /dev/null
+          curl -fsS -o /dev/null -w '%{http_code}\n' "$WEB_URL"

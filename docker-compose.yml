@@ -1,0 +1,114 @@
+# Local mirror of the GCP topology:
+#   postgres  -> Cloud SQL for PostgreSQL
+#   redis     -> Memorystore for Redis
+#   backend   -> Cloud Run (NestJS)
+#   frontend  -> Cloud Run (Next.js)
+#
+# Object storage has no local emulator here; set GCS_BUCKET to a real dev bucket
+# and authenticate with `gcloud auth application-default login` if you want to
+# exercise signed uploads.
+
+# Pinned so the project (and its named volume) survives the directory being
+# renamed — otherwise compose derives the name from the folder and orphans the
+# database on the next rename.
+name: atelier
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: atelier-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: atelier
+      POSTGRES_PASSWORD: atelier
+      POSTGRES_DB: atelier
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U atelier -d atelier']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: atelier-redis
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'no', '--maxmemory', '256mb', '--maxmemory-policy', 'allkeys-lru']
+    ports:
+      - '6379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      target: builder
+    container_name: atelier-backend
+    restart: unless-stopped
+    # Retry the migration instead of crash-looping: on a cold start Postgres can
+    # report healthy a moment before it accepts connections.
+    command: >
+      sh -c "until npx prisma migrate deploy; do echo 'waiting for postgres...'; sleep 3; done && npm run start:dev"
+    environment:
+      NODE_ENV: development
+      PORT: 8080
+      API_PREFIX: api/v1
+      DATABASE_URL: postgresql://atelier:atelier@postgres:5432/atelier?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_ACCESS_SECRET: dev-access-secret-change-in-production
+      JWT_REFRESH_SECRET: dev-refresh-secret-change-in-production
+      CORS_ORIGINS: http://localhost:3000
+      CURRENCY: EGP
+      GCS_BUCKET: ${GCS_BUCKET:-}
+      # Public URLs used to build the Kashier redirect and webhook targets.
+      STOREFRONT_URL: http://localhost:3000
+      API_PUBLIC_URL: http://localhost:8080/api/v1
+      # Leave the merchant id empty to hide card payment; the storefront then
+      # only offers cash on delivery.
+      KASHIER_MERCHANT_ID: ${KASHIER_MERCHANT_ID:-}
+      KASHIER_API_KEY: ${KASHIER_API_KEY:-}
+      KASHIER_SECRET_KEY: ${KASHIER_SECRET_KEY:-}
+      KASHIER_MODE: ${KASHIER_MODE:-test}
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/prisma:/app/prisma
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      target: builder
+    container_name: atelier-frontend
+    restart: unless-stopped
+    command: npm run dev
+    environment:
+      # Inside the compose network the backend is reachable by service name.
+      API_URL: http://backend:8080/api/v1
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      NEXT_PUBLIC_CURRENCY: EGP
+      NEXT_PUBLIC_LOCALE: en-EG
+      NEXT_PUBLIC_FREE_SHIPPING_CENTS: 150000
+      NEXT_PUBLIC_FLAT_SHIPPING_CENTS: 6000
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:

@@ -1,0 +1,35 @@
+# Copy to terraform.tfvars and fill in.
+
+project_id  = "my-gcp-project"
+region      = "europe-west1"
+app_name    = "atelier"
+environment = "prod"
+
+# ---- data tier ---------------------------------------------------------------
+db_tier              = "db-g1-small"   # db-custom-2-7680 once traffic is real
+db_availability_type = "ZONAL"         # REGIONAL for automatic failover
+enable_read_replica  = false
+
+redis_tier      = "BASIC"              # STANDARD_HA for a replicated cache
+redis_memory_gb = 1
+
+# ---- edge --------------------------------------------------------------------
+# Leave the load balancer off for the first apply, point DNS at the reserved IP,
+# then enable it. Flip lb_only_ingress last, once the certificate is ACTIVE.
+custom_domain        = ""              # e.g. "shop.example.com"
+enable_load_balancer = false
+lb_only_ingress      = false
+
+waf_rate_limit_per_minute = 600
+waf_allowed_regions       = []         # e.g. ["EG", "SA", "AE"]
+
+# ---- application -------------------------------------------------------------
+currency               = "EGP"
+backend_min_instances  = 1
+backend_max_instances  = 10
+frontend_min_instances = 0
+frontend_max_instances = 20
+
+# Set by CI after the first image push; leave empty initially.
+backend_image  = ""
+frontend_image = ""
