@@ -1,5 +1,7 @@
 # Atelier — Full-Stack Bilingual Clothing Store
 
+English · **[العربية](README.ar.md)**
+
 A production-shaped e-commerce application for a clothing brand, built to run on
 Google Cloud Platform. Bilingual (English / Arabic with full RTL), themed
 (light / dark / follow-OS), with card payments through Kashier and an admin
