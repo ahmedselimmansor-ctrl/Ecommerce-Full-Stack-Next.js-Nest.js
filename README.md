@@ -1,4 +1,4 @@
-# Atelier — Full-Stack Bilingual Clothing Store
+# Atelier , Full-Stack Bilingual Clothing Store
 
 English · **[العربية](README.ar.md)**
 
