@@ -29,6 +29,14 @@ const envSchema = z.object({
   GCS_PUBLIC_BASE_URL: z.string().default(''),
   GOOGLE_CLOUD_PROJECT: z.string().optional(),
 
+  // ---- RabbitMQ (Message Queue) ----
+  RABBITMQ_HOST: z.string().default('localhost'),
+  RABBITMQ_PORT: z.coerce.number().int().positive().default(5672),
+  RABBITMQ_USER: z.string().default('rabbitmq'),
+  RABBITMQ_PASSWORD: z.string().default('rabbitmq'),
+  RABBITMQ_EXCHANGE: z.string().default('atelier_events'),
+  RABBITMQ_CONNECTION_RETRY_DELAY: z.coerce.number().int().positive().default(1000),
+
   // ---- Kashier (Egyptian payment gateway) ----
   KASHIER_MERCHANT_ID: z.string().default(''),
   KASHIER_API_KEY: z.string().default(''),
@@ -92,6 +100,14 @@ export function configuration() {
       password: env.REDIS_PASSWORD,
       tls: env.REDIS_TLS,
       ttlSeconds: env.CACHE_TTL_SECONDS,
+    },
+    rabbitmq: {
+      host: env.RABBITMQ_HOST,
+      port: env.RABBITMQ_PORT,
+      user: env.RABBITMQ_USER,
+      password: env.RABBITMQ_PASSWORD,
+      exchange: env.RABBITMQ_EXCHANGE,
+      connectionRetryDelay: env.RABBITMQ_CONNECTION_RETRY_DELAY,
     },
     jwt: {
       accessSecret: env.JWT_ACCESS_SECRET,

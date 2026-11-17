@@ -17,6 +17,9 @@ const nextConfig: NextConfig = {
       // Seed catalogue photography (Unsplash License). Images uploaded through
       // the admin go to Cloud Storage above; this host only serves demo data.
       { protocol: 'https', hostname: 'images.unsplash.com', pathname: '/**' },
+      // Local development with MinIO (docker-compose)
+      { protocol: 'http', hostname: 'localhost', port: '9000', pathname: '/**' },
+      { protocol: 'http', hostname: 'minio', port: '9000', pathname: '/**' },
     ],
   },
 
